@@ -1,0 +1,18 @@
+version: '2.1'
+
+services:
+  nginx:
+    image: cdk-demo-nginx:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+  
+  api:
+    image: cdk-demo-api:latest
+    environment:
+      - CDKDEMO_ENVIRONMENT=development
+      - CDKDEMO_DEBUG=TRUE
+      - CDKDEMO_SECRET=ThisIsANotSoSecretSecretKey
+    ports:
+      - 8000:8000
