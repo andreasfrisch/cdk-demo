@@ -2,7 +2,7 @@ version: '2.1'
 
 services:
   nginx:
-    image: cdk-demo-nginx:latest
+    build: nginx/local/
     ports:
       - "80:80"
     depends_on:

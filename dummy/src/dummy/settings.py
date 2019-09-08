@@ -23,13 +23,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = 'szohr60@+kx_8hzv!$iqz_0fl57pu0bbg15gfw_6q&9-qd(q@='
 
 ENVIRONMENT = os.environ["CDKDEMO_ENVIRONMENT"]
-SECRET = os.environ["CDKDEMO_SECRET"]
+SECRET = os.environ["CDKDEMO_SECRET"] if "CDKDEMO_SECRET" in os.environ else "Rubberdash! No secret found!"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False if not "CDKDEMO_DEBUG" in os.environ else os.environ["CDKDEMO_DEBUG"] == "TRUE"
 VERSION = 0.1
 
-ALLOWED_HOSTS = ['*ma']
+ALLOWED_HOSTS = ['*']
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 STATIC_URL = '/static/'

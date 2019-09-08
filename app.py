@@ -11,6 +11,11 @@ class AutoScalingFargateService(core.Stack):
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, *kwargs)
 
+        VERSION = self.node.try_get_context("version")
+        if not VERSION:
+            print("Could not read 'version'\nRemember to pass version number as a context paramter\ne.g.: cdk deploy -c version=<version>\nDefaulting to 'latest'")
+            VERSION = "latest"
+
         logDriver = ecs.AwsLogDriver(
             stream_prefix = "CDKDEMO"
         )
@@ -40,27 +45,25 @@ class AutoScalingFargateService(core.Stack):
         #     self, "SomeParameter",
         #     parameter_name = "CDKDEMO_SECRET"
         # )
-        # parameter = ssm.StringParameter.from_string_parameter_name(
-        #     self, "WHATEVER",
-        #     string_parameter_name = "/CDKDEMO_SECRET"
-        # )
+        parameter = ssm.StringParameter.from_string_parameter_name(
+            self, "CDKDEMO-SECRETSTUFF",
+            string_parameter_name = "/CDKDEMO_SECRET"
+        )
         api_repository = ecr.Repository.from_repository_name(
             self, "CDKDEMO-Repo-Django",
             repository_name="frisch-cdk-test-django"
         )
         api_container = task_definition.add_container(
             "CDKDEMO-CONT-Django",
-            image=ecs.ContainerImage.from_ecr_repository(api_repository, "latest"),
+            image=ecs.ContainerImage.from_ecr_repository(api_repository, VERSION),
             logging=logDriver,
             environment={
                 'CDKDEMO_ENVIRONMENT': 'AWS',
-                'CDKDEMO_DEBUG': 'True',
-                'CDKDEMO_SECRET': 'not really a secret'
+                'CDKDEMO_DEBUG': 'True'
             },
-            # secrets = {
-            #     'CDKDEMO_SECRET': ecs.Secret.from_ssm_parameter(parameter)
-            # #     'CDKDEMO_SECRET': parameter
-            # }
+            secrets = {
+                'CDKDEMO_SECRET': ecs.Secret.from_ssm_parameter(parameter)
+            }
         )
         api_container.add_port_mappings(
             ecs.PortMapping(container_port=8000, host_port=8000)
