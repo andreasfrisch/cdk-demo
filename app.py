@@ -5,112 +5,43 @@ from aws_cdk import (
     aws_elasticloadbalancingv2 as elbv2,
     aws_ssm as ssm,
     core,
+    aws_ecs_patterns as ecs_patterns
 )
 
-class AutoScalingFargateService(core.Stack):
-    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
-        super().__init__(scope, id, *kwargs)
-
-        VERSION = self.node.try_get_context("version")
-        if not VERSION:
-            print("Could not read 'version'\nRemember to pass version number as a context paramter\ne.g.: cdk deploy -c version=<version>\nDefaulting to 'latest'")
-            VERSION = "latest"
-
-        logDriver = ecs.AwsLogDriver(
-            stream_prefix = "CDKDEMO"
-        )
-
-        # Create a cluster
-        vpc = ec2.Vpc(
-            self, "CDKDEMO-Vpc",
-            max_azs = 2
-        )
-
-        cluster = ecs.Cluster(
-            self, 'CDKDEMO-Cluster',
-            vpc = vpc
-        )
-
-        task_definition = ecs.FargateTaskDefinition(
-            self, 'CDKDEMO-FARGATE-TaskDef',
-            memory_limit_mib = 512,
-            cpu = 256
-        )
-
-        # secret = aws_secretsmanager.Secret.from_secret_arn(
-        #     self, "someSecret",
-        #     secret_arn = ""
-        # )
-        # parameter = ssm.StringParameter.from_string_parameter_attributes(
-        #     self, "SomeParameter",
-        #     parameter_name = "CDKDEMO_SECRET"
-        # )
-        parameter = ssm.StringParameter.from_string_parameter_name(
-            self, "CDKDEMO-SECRETSTUFF",
-            string_parameter_name = "/CDKDEMO_SECRET"
-        )
-        api_repository = ecr.Repository.from_repository_name(
-            self, "CDKDEMO-Repo-Django",
-            repository_name="frisch-cdk-test-django"
-        )
-        api_container = task_definition.add_container(
-            "CDKDEMO-CONT-Django",
-            image=ecs.ContainerImage.from_ecr_repository(api_repository, VERSION),
-            logging=logDriver,
-            environment={
-                'CDKDEMO_ENVIRONMENT': 'AWS',
-                'CDKDEMO_DEBUG': 'True'
-            },
-            secrets = {
-                'CDKDEMO_SECRET': ecs.Secret.from_ssm_parameter(parameter)
-            }
-        )
-        api_container.add_port_mappings(
-            ecs.PortMapping(container_port=8000, host_port=8000)
-        )
-
-        repository = ecr.Repository.from_repository_name(
-            self, "CDKDemo-Repo-Nginx",
-            repository_name="frisch-cdk-test"
-        )
-        container = task_definition.add_container(
-            "CDKDEMO-CONT-Nginx",
-            image = ecs.ContainerImage.from_ecr_repository(repository, "latest"),
-            logging = logDriver
-        )
-        container.add_port_mappings(
-            ecs.PortMapping(container_port=80, host_port=80)
-        )
-
-        # Create Fargate Service
-        fargate_service = ecs.FargateService(
-            self, "CDKDEMO-SERVICE",
-            cluster = cluster,
-            task_definition = task_definition,
-            desired_count = 1
-        )
-
-        loadbalancer = elbv2.ApplicationLoadBalancer(
-            self, "CDKDEMO-ALB",
-            vpc = vpc,
-            internet_facing = True
-        )
-        listener = loadbalancer.add_listener(
-            "LB-Listener",
-            port = 80
-        )
-        listener.add_targets(
-            "ECS",
-            port = 80,
-            targets = [fargate_service]
-        )
-
-        core.CfnOutput(
-            self, "LoadBalancerDNS",
-            value = loadbalancer.load_balancer_dns_name
-        )
+PROJECT = {"stack": "ak", "name": "allderms-ak", "image": "allderms-ak", "region": "eu-west-3"} #AK
+# PROJECT = {"stack": "pso", "name": "allderms", "image": "allderms-pso", "region": "eu-west-3"} #PSO
 
 app = core.App()
-AutoScalingFargateService(app, "CDK-070919")
-core.Tag.add(app, 'context', 'CDK-DEMO')
+stack = core.Stack(app, "%s-stack" % PROJECT["stack"], env={"region": PROJECT["region"]})
+vpc = ec2.Vpc(stack, "%s-VPC" % PROJECT["stack"])
+# cluster = ecs.Cluster(stack, "test-cluster", vpc=vpc)
+
+api_repository = ecr.Repository.from_repository_name(
+    stack,
+    "DermView_Repository",
+    repository_name="valinos-ak-dermview" # this is always 'ak' for historical reasons
+)
+
+securityGroup = ec2.SecurityGroup(stack, '%s-security-group' % PROJECT["name"],
+    vpc=vpc,
+    allow_all_outbound=True,
+    description='DermView %s Security Group' % PROJECT["stack"],
+    # securityGroupName=SECURITY_GROUP_ALPHA
+)
+
+for derm in [1,2,3,4,5]:
+    load_balanced_fargate_service = ecs_patterns.ApplicationLoadBalancedFargateService(stack, "%s-%s-%s-Service" % (PROJECT["name"], PROJECT["stack"], derm),
+        vpc=vpc,
+        memory_limit_mib=2048,
+        cpu=512,
+        task_image_options={
+            "image": ecs.ContainerImage.from_ecr_repository(api_repository, PROJECT["image"])
+        },
+        security_groups=[securityGroup]
+    )
+    
+    load_balanced_fargate_service.target_group.configure_health_check(
+        path="/"
+    )
+
 app.synth()
